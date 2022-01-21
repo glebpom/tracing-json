@@ -12,6 +12,7 @@ use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::registry::SpanRef;
 use tracing_subscriber::Layer;
+use time::format_description::well_known::Rfc3339;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum Datatype {
@@ -160,18 +161,18 @@ where
         message: &str,
         level: &Level,
     ) -> Result<()> {
-        let now = chrono::Utc::now();
+        let now = time::OffsetDateTime::now_utc();
 
         self.fields.iter().try_for_each(|f| match &f.dtype {
             Datatype::Constant(s) => Ok(ms.serialize_entry(&f.name, &s)?),
             Datatype::Level => Ok(ms.serialize_entry(&f.name, &level.to_string())?),
             Datatype::Message => Ok(ms.serialize_entry(&f.name, message)?),
-            Datatype::CurrentIso8601 => Ok(ms.serialize_entry(&f.name, &now.to_rfc3339())?),
+            Datatype::CurrentIso8601 => Ok(ms.serialize_entry(&f.name, &now.format(&Rfc3339)?)?),
             Datatype::CurrentMilliseconds => {
-                Ok(ms.serialize_entry(&f.name, &now.timestamp_millis())?)
+                Ok(ms.serialize_entry(&f.name, &(now.unix_timestamp_nanos() / 1_000_000))?)
             }
             Datatype::CurrentNanoseconds => {
-                Ok(ms.serialize_entry(&f.name, &now.timestamp_nanos())?)
+                Ok(ms.serialize_entry(&f.name, &now.unix_timestamp_nanos())?)
             }
         })
     }

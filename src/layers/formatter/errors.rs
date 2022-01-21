@@ -9,6 +9,8 @@ pub enum StructuredError {
     WriterError(String),
     #[error("Structured :: IoError: {0}")]
     IoError(String),
+    #[error("Structured :: Rfc3339 formatting error: {0}")]
+    Rfc3339(#[from] time::error::Format),
 }
 
 impl From<serde_json::Error> for StructuredError {
