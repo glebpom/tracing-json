@@ -2,7 +2,7 @@
 name = "tracing-json"
 version = "0.1.1-alpha.0"
 authors = ["Mahmut Bulut <vertexclique@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "Tracing Structured Json Logging Adapter"
 keywords = ["tracing", "logging", "metrics", "json", "subscriber"]
 categories = ["development-tools", "development-tools::debugging", "development-tools::profiling"]
