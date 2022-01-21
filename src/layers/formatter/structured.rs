@@ -116,7 +116,7 @@ impl fmt::Display for SpanState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Structured<W>
 where
-    W: MakeWriter + 'static,
+    W: for<'writer> MakeWriter<'writer> + 'static,
 {
     make_writer: W,
     pub(crate) fields: Vec<Field>,
@@ -124,7 +124,7 @@ where
 
 impl<W> Structured<W>
 where
-    W: MakeWriter + 'static,
+    W: for<'writer> MakeWriter<'writer> + 'static,
 {
     pub fn new<'d>(format: &'d str, writer: W) -> Result<Self> {
         let conf: Value = serde_json::from_str(format)
@@ -291,7 +291,7 @@ where
 impl<S, W> Layer<S> for Structured<W>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
-    W: MakeWriter + 'static,
+    W: for<'writer> MakeWriter<'writer> + 'static,
 {
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
         let current_span = ctx.lookup_current();
@@ -306,7 +306,7 @@ where
             });
     }
 
-    fn new_span(&self, _attrs: &Attributes, id: &Id, ctx: Context<'_, S>) {
+    fn on_new_span(&self, _attrs: &Attributes, id: &Id, ctx: Context<'_, S>) {
         let span = ctx.span(id).expect("Span not found, this is a bug");
         if let Ok(serialized) = self.serialize_span(&span, SpanState::Enter) {
             let _ = self.emit(serialized);
