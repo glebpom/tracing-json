@@ -1,11 +1,23 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::time::Instant;
 use tracing::field::{Field, Visit};
 use tracing::span::{Attributes, Record};
 use tracing::{Id, Subscriber};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::Layer;
+use std::time::Duration;
+
+struct Instant(std::time::Instant);
+
+impl Instant {
+    fn now() -> Instant {
+        Instant(std::time::Instant::now())
+    }
+
+    fn elapsed(&self) -> Duration {
+        self.0.elapsed()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct JsonStorageLayer;
@@ -139,8 +151,7 @@ impl<S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>> Layer
             let extensions = span.extensions();
             extensions
                 .get::<Instant>()
-                .expect("Timestamp not found on 'record', this is a bug")
-                .elapsed()
+                .map(|instant| instant.elapsed())
         };
 
         let mut extensions_mut = span.extensions_mut();
@@ -148,8 +159,8 @@ impl<S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>> Layer
             .get_mut::<JsonStorage>()
             .expect("Timestamp not found on 'record', this is a bug");
 
-        if let Ok(elapsed) = serde_json::to_value(elapsed.as_millis()) {
-            visitor.values.insert("elapsed_milliseconds", elapsed);
+        if let Some(elapsed) = elapsed {
+            visitor.values.insert("elapsed_milliseconds",  serde_json::to_value(elapsed.as_millis()).unwrap());
         }
     }
 }
