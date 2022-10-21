@@ -181,7 +181,7 @@ where
     where
         S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
     {
-        format!("[{} - {}]", span.metadata().name().to_lowercase(), state)
+        format!("[{}::{} - {}]", span.metadata().module_path().unwrap_or("(unknown)"), span.metadata().name(), state)
     }
 
     fn format_event_message<S>(
