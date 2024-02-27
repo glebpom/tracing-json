@@ -12,14 +12,18 @@ documentation = "https://docs.rs/tracing-json"
 readme = "README.md"
 license = "Apache-2.0/MIT"
 
+[features]
+opentelemetry = ["dep:tracing-opentelemetry", "dep:opentelemetry"]
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 tracing = { version = "0.1.13", default-features = false, features = ["log", "std"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "fmt"] }
-tracing-log = "0.1"
 thiserror = "1.0"
 time = { version = "0.3", features = ["formatting"] }
+tracing-opentelemetry = { version = "0.22.0", optional = true }
+opentelemetry = { version = "0.21.0", optional = true }
 
 [dev-dependencies]
 tracing = { version = "0.1.13", default-features = false, features = ["log", "std", "attributes"] }

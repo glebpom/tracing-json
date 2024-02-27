@@ -22,6 +22,8 @@ pub enum Datatype {
     CurrentIso8601,
     CurrentMilliseconds,
     CurrentNanoseconds,
+    TraceId,
+    SpanId,
 }
 
 impl Datatype {
@@ -41,6 +43,8 @@ impl Datatype {
                 Some(d) if d == "currentiso8601" => Ok(Datatype::CurrentIso8601),
                 Some(d) if d == "currentmilliseconds" => Ok(Datatype::CurrentMilliseconds),
                 Some(d) if d == "currentnanoseconds" => Ok(Datatype::CurrentNanoseconds),
+                Some(d) if d == "traceid" => Ok(Datatype::TraceId),
+                Some(d) if d == "spanid" => Ok(Datatype::SpanId),
                 _ => {
                     return Err(StructuredError::ParseError(
                         "Unexpected json type for datatype value".to_string(),
@@ -155,12 +159,16 @@ where
         }
     }
 
-    fn structured_fields(
+    fn structured_fields<S>(
         &self,
         ms: &mut impl SerializeMap<Error = serde_json::Error>,
+        span: Option<&SpanRef<S>>,
         message: &str,
         level: &Level,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+    {
         let now = time::OffsetDateTime::now_utc();
 
         self.fields.iter().try_for_each(|f| match &f.dtype {
@@ -174,7 +182,64 @@ where
             Datatype::CurrentNanoseconds => {
                 Ok(ms.serialize_entry(&f.name, &now.unix_timestamp_nanos())?)
             }
+            Datatype::TraceId => {
+                #[cfg(feature = "opentelemetry")]
+                {
+                    let trace_id = Self::extract_otel_trace_id(span);
+                    if let Some(trace_id) = trace_id {
+                        ms.serialize_entry(&f.name, &trace_id.to_string())?;
+                    }
+                }
+                #[cfg(not(feature = "opentelemetry"))]
+                {
+                    let _ = span;
+                }
+                Ok(())
+            }
+            Datatype::SpanId => {
+                #[cfg(feature = "opentelemetry")]
+                {
+                    let span_id = Self::extract_otel_span_id(span);
+                    if let Some(span_id) = span_id {
+                        ms.serialize_entry(&f.name, &span_id.to_string())?;
+                    }
+                }
+                #[cfg(not(feature = "opentelemetry"))]
+                {
+                    let _ = span;
+                }
+                Ok(())
+            }
         })
+    }
+
+    #[cfg(feature = "opentelemetry")]
+    fn extract_otel_span_id<S>(span: Option<&SpanRef<S>>) -> Option<opentelemetry::trace::SpanId>
+    where
+        S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+    {
+        let span = span?;
+        let extensions = span.extensions();
+        let otel = extensions.get::<tracing_opentelemetry::OtelData>()?;
+        let span_id = otel.builder.span_id?;
+        Some(span_id)
+    }
+
+    #[cfg(feature = "opentelemetry")]
+    fn extract_otel_trace_id<S>(span: Option<&SpanRef<S>>) -> Option<opentelemetry::trace::TraceId>
+    where
+        S: Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+    {
+        for span in span?.scope() {
+            let extensions = span.extensions();
+            if let Some(otel) = extensions.get::<tracing_opentelemetry::OtelData>() {
+                if let Some(trace_id) = otel.builder.trace_id {
+                    return Some(trace_id);
+                }
+            };
+        }
+
+        None
     }
 
     fn format_span_context<S>(&self, span: &SpanRef<S>, state: SpanState) -> String
@@ -232,7 +297,12 @@ where
         let mut map_serializer = serializer.serialize_map(None)?;
 
         let message = self.format_event_message(&current_span, event, &event_visitor);
-        self.structured_fields(&mut map_serializer, &message, event.metadata().level())?;
+        self.structured_fields(
+            &mut map_serializer,
+            current_span.as_ref(),
+            &message,
+            event.metadata().level(),
+        )?;
 
         // Add all the other fields associated with the event, expect the message we already used.
         let _ = event_visitor
@@ -267,7 +337,12 @@ where
         let mut serializer = serde_json::Serializer::new(&mut buffer);
         let mut map_serializer = serializer.serialize_map(None)?;
         let message = self.format_span_context(&span, state);
-        self.structured_fields(&mut map_serializer, &message, span.metadata().level())?;
+        self.structured_fields(
+            &mut map_serializer,
+            Some(span),
+            &message,
+            span.metadata().level(),
+        )?;
 
         let extensions = span.extensions();
         if let Some(visitor) = extensions.get::<JsonStorage>() {
